@@ -1,6 +1,7 @@
-#include <WiFi.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
 
-#include <HTTPClient.h>
+
 #include <WiFiClient.h>
 #include <WiFiManager.h>
 
@@ -42,11 +43,11 @@ Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 // define the number of bytes you want to access
 #define EEPROM_SIZE 1
 
-#define BUZZER 16
-#define BTN_UP 25
-#define BTN_DOWN 26
-#define BTN_START 32
-#define BTN_MENU 33
+#define BUZZER 10
+#define BTN_START 15
+#define BTN_MENU 13
+#define BTN_UP 12
+#define BTN_DOWN 14
 #define debounceTimeout 50
 int startButtonPreviousState = HIGH; // HIGH means NOT PRESSED
 int menuButtonPreviousState = LOW; // LOW means PRESSED
@@ -73,7 +74,7 @@ void setup()
 {  
   Serial.begin(115200); // initialize serial communication at 115200 bits per second:
   // Set Machine Number
-  snprintf(machineNumber, 25, "DEVICE-%llX", ESP.getEfuseMac());
+  snprintf(machineNumber, 25, "DEVICE-%llX", WiFi.macAddress());
   // initialize EEPROM with predefined size
   EEPROM.begin(EEPROM_SIZE);
   
