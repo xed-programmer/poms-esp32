@@ -1,9 +1,7 @@
-#include <ESP8266WiFi.h>
-#include <ESP8266HTTPClient.h>
-
+#include <WiFi.h>
 #include <WiFiClient.h>
+#include <HTTPClient.h>
 #include <WiFiManager.h>
-
 #include <EEPROM.h>
 
 #include <Wire.h>
@@ -23,7 +21,7 @@ MAX30105 particleSensor;
 #define SCREEN_WIDTH 128 // OLED width,  in pixels
 #define SCREEN_HEIGHT 64 // OLED height, in pixels
 
-//#define ARRAY_SIZE(x) sizeof(x)/sizeof(x[0])
+#define ARRAY_SIZE(x) sizeof(x)/sizeof(x[0])
 
 uint32_t irBuffer[100]; //infrared LED sensor data
 uint32_t redBuffer[100];  //red LED sensor data
@@ -385,7 +383,7 @@ void loop()
     }else if(menuButtonPressed==HIGH){
       noTone(BUZZER);
       menuButtonPreviousState = LOW;
-      optionSelected = (optionSelected < sizeof(menuOption)-1)? optionSelected + 1:0;
+      optionSelected = (optionSelected < ARRAY_SIZE(menuOption)-1)? optionSelected + 1:0;
       delay(500);      
     }else if(upButtonPressed==HIGH && menuButtonPreviousState==HIGH && optionSelected == 1){            
       // SPO2 LIMIIT 100
