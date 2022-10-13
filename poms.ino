@@ -1,7 +1,6 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
 
-
 #include <WiFiClient.h>
 #include <WiFiManager.h>
 
@@ -44,13 +43,13 @@ Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 #define EEPROM_SIZE 1
 
 #define BUZZER 10
-#define BTN_START 15
+#define BTN_START D8
 #define BTN_MENU 13
 #define BTN_UP 12
 #define BTN_DOWN 14
 #define debounceTimeout 50
-int startButtonPreviousState = HIGH; // HIGH means NOT PRESSED
-int menuButtonPreviousState = LOW; // LOW means PRESSED
+int startButtonPreviousState = LOW; // HI means NOT PRESSED
+int menuButtonPreviousState = HIGH; // LO means PRESSED
 long int lastDebounceTime;
 
 bool isBeep = true;
@@ -79,10 +78,10 @@ void setup()
   EEPROM.begin(EEPROM_SIZE);
   
   pinMode(BUZZER, OUTPUT);
-  pinMode(BTN_UP,INPUT_PULLUP);
-  pinMode(BTN_DOWN,INPUT_PULLUP);
-  pinMode(BTN_START,INPUT_PULLUP);
-  pinMode(BTN_MENU,INPUT_PULLUP);
+  pinMode(BTN_UP,INPUT);
+  pinMode(BTN_DOWN,INPUT);
+  pinMode(BTN_START,INPUT);
+  pinMode(BTN_MENU,INPUT);
 
   // Get the SPO2Limit Value
   spo2Limit = EEPROM.read(addressSpo2Limit);
@@ -157,14 +156,14 @@ void setup()
 }
 void checkButton(){
   // check for button press
-  if (digitalRead(BTN_UP) == LOW ) {
+  if (digitalRead(BTN_UP) == HIGH) {
     // poor mans debounce/press-hold, code not ideal for production
     delay(50);
-    if(digitalRead(BTN_UP) == LOW ){
+    if(digitalRead(BTN_UP) == HIGH){
       Serial.println("Button Pressed");
       // still holding button for 3000 ms, reset settings, code not ideaa for production
       delay(3000); // reset delay hold
-      if( digitalRead(BTN_UP) == LOW ){
+      if( digitalRead(BTN_UP) == HIGH){
         Serial.println("Button Held");
         Serial.println("Erasing Config, restarting");
         wm.resetSettings();
@@ -316,24 +315,25 @@ void loop()
   int menuButtonPressed = digitalRead(BTN_MENU);
   int upButtonPressed = digitalRead(BTN_UP);
   int downButtonPressed = digitalRead(BTN_DOWN);
+  Serial.print("Start: ");
+  Serial.println(startButtonPressed);
   
   // Get the current time
   long int currentTime = millis();
   // check if button is not press
-  if(startButtonPressed==HIGH && menuButtonPressed==HIGH && upButtonPressed==HIGH && downButtonPressed==HIGH){
+  if(startButtonPressed==LOW && menuButtonPressed==LOW && upButtonPressed==LOW && downButtonPressed==LOW){
     lastDebounceTime = currentTime;
-    startButtonPreviousState = HIGH;
-    menuButtonPreviousState = HIGH;
+    startButtonPreviousState = LOW;
   }
 
   // DISPLAY NG MENU
   if(!isStart){
-    if(menuButtonPreviousState == LOW){
+    if(menuButtonPreviousState == HIGH){
       //menu is selected
       switch(optionSelected){
         case 1:
         {
-                    // SET SPO2 LIMIT
+          // SET SPO2 LIMIT
           String msg = menuOption[optionSelected] + "\n\tSPO2 Level:"+spo2Limit + "%";
           oledPrint(0,0,msg);
           break;
@@ -357,7 +357,7 @@ void loop()
           checkButton();
           break;        
         }
-         case 0:
+        case 0:
         default:        
         {
           // welcome
@@ -371,9 +371,9 @@ void loop()
   // CHECK KUNG NA CLICK NA IYUNG BUTTON
   if((currentTime - lastDebounceTime) > debounceTimeout){
     // Button is pressed
-    if(startButtonPressed==LOW){
+    if(startButtonPressed==HIGH){
       // START/STOP Button is pressed
-      menuButtonPreviousState = HIGH;
+      menuButtonPreviousState = LOW;
       if(!isStart){
         initialReading = false;
         isStart = true;
@@ -382,12 +382,12 @@ void loop()
         noTone(BUZZER);
         delay(1000);
       }
-    }else if(menuButtonPressed==LOW){
+    }else if(menuButtonPressed==HIGH){
       noTone(BUZZER);
       menuButtonPreviousState = LOW;
       optionSelected = (optionSelected < sizeof(menuOption)-1)? optionSelected + 1:0;
       delay(500);      
-    }else if(upButtonPressed==LOW && menuButtonPreviousState==LOW && optionSelected == 1){            
+    }else if(upButtonPressed==HIGH && menuButtonPreviousState==HIGH && optionSelected == 1){            
       // SPO2 LIMIIT 100
       if(spo2Limit<100){
         spo2Limit++;
@@ -396,8 +396,8 @@ void loop()
         EEPROM.commit();
         delay(500);
       }
-    }else if(downButtonPressed==LOW){
-      if(menuButtonPreviousState==LOW && optionSelected == 1){
+    }else if(downButtonPressed==HIGH){
+      if(menuButtonPreviousState==HIGH && optionSelected == 1){
         // MIN SPO2 LIMIT 90
         if(spo2Limit>90){
           spo2Limit--;
