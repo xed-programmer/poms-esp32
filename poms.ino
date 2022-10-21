@@ -13,7 +13,7 @@
 
 // REPLACE with your Domain name and URL path or IP address with path
 const String serverName = "http://10.10.10.200:8000/";
-
+ 
 // Keep this API Key value to be compatible with the PHP code provided in the project page.
 String apiKeyValue = "tPmAT5Ab3j7F9";
 
@@ -46,8 +46,8 @@ Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 #define BTN_START 32
 #define BTN_MENU 33
 #define debounceTimeout 50
-int startButtonPreviousState = LOW; // HI means NOT PRESSED
-int menuButtonPreviousState = HIGH; // LO means PRESSED
+int startButtonPreviousState = HIGH; // HI means NOT PRESSED
+int menuButtonPreviousState = LOW; // LO means PRESSED
 long int lastDebounceTime;
 
 bool isBeep = true;
@@ -76,10 +76,10 @@ void setup()
   EEPROM.begin(EEPROM_SIZE);
 
   pinMode(BUZZER, OUTPUT);
-  pinMode(BTN_UP, INPUT);
-  pinMode(BTN_DOWN, INPUT);
-  pinMode(BTN_START, INPUT);
-  pinMode(BTN_MENU, INPUT);
+  pinMode(BTN_UP, INPUT_PULLUP);
+  pinMode(BTN_DOWN, INPUT_PULLUP);
+  pinMode(BTN_START, INPUT_PULLUP);
+  pinMode(BTN_MENU, INPUT_PULLUP);
 
   // Get the SPO2Limit Value
   spo2Limit = EEPROM.read(addressSpo2Limit);
@@ -113,7 +113,7 @@ void setup()
     delay(1500);
   }
 
-  byte ledBrightness = 60; //Options: 0=Off to 255=50mA
+  byte ledBrightness = 255; //Options: 0=Off to 255=50mA
   byte sampleAverage = 4; //Options: 1, 2, 4, 8, 16, 32
   byte ledMode = 2; //Options: 1 = Red only, 2 = Red + IR, 3 = Red + IR + Green
   byte sampleRate = 100; //Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
@@ -162,14 +162,14 @@ void setup()
 }
 void checkButton() {
   // check for button press
-  if (digitalRead(BTN_UP) == HIGH) {
+  if (digitalRead(BTN_UP) == LOW) {
     // poor mans debounce/press-hold, code not ideal for production
     delay(50);
-    if (digitalRead(BTN_UP) == HIGH) {
+    if (digitalRead(BTN_UP) == LOW) {
       Serial.println("Button Pressed");
       // still holding button for 3000 ms, reset settings, code not ideaa for production
       delay(3000); // reset delay hold
-      if ( digitalRead(BTN_UP) == HIGH) {
+      if ( digitalRead(BTN_UP) == LOW) {
         Serial.println("Button Held");
         Serial.println("Erasing Config, restarting");
         wm.resetSettings();
@@ -316,7 +316,7 @@ void loop()
 
   // DISPLAY NG MENU
   if (!isStart) {
-    if (menuButtonPreviousState == HIGH) {
+    if (menuButtonPreviousState == LOW) {
       //menu is selected
       switch (optionSelected) {
         case 1:
@@ -359,17 +359,17 @@ void loop()
   // Get the current time
   long int currentTime = millis();
   // check if button is not press
-  if (startButtonPressed == LOW && menuButtonPressed == LOW && upButtonPressed == LOW && downButtonPressed == LOW) {
+  if (startButtonPressed == HIGH && menuButtonPressed == HIGH && upButtonPressed == HIGH && downButtonPressed == HIGH) {
     lastDebounceTime = currentTime;
-    startButtonPreviousState = LOW;
+    startButtonPreviousState = HIGH;
   }
 
   // CHECK KUNG NA CLICK NA IYUNG BUTTON
   if ((currentTime - lastDebounceTime) > debounceTimeout) {
     // Button is pressed
-    if (startButtonPressed == HIGH) {
+    if (startButtonPressed == LOW) {
       // START/STOP Button is pressed
-      menuButtonPreviousState = LOW;
+      menuButtonPreviousState = HIGH;
       if (!isStart) {
         initialReading = true;
         isStart = true;
@@ -378,19 +378,19 @@ void loop()
         noTone(BUZZER);
         delay(1000);
       }
-    } else if (menuButtonPressed == HIGH) {
+    } else if (menuButtonPressed == LOW) {
       noTone(BUZZER);
-      menuButtonPreviousState = LOW;
+      menuButtonPreviousState = HIGH;
       optionSelected = (optionSelected < ARRAY_SIZE(menuOption) - 1) ? optionSelected + 1 : 0;
       delay(500);
     }
-    else if (menuButtonPreviousState == HIGH && optionSelected == 1) {
+    else if (menuButtonPreviousState == LOW && optionSelected == 1) {
       bool update = false;
-      if (upButtonPressed == HIGH) {
+      if (upButtonPressed == LOW) {
         if (spo2Limit < 100)
           spo2Limit++;
         update = true;
-      } else if (downButtonPressed == HIGH) {
+      } else if (downButtonPressed == LOW) {
         if (spo2Limit > 90)
           spo2Limit--;
         update = true;
