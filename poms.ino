@@ -13,7 +13,7 @@
 
 // REPLACE with your Domain name and URL path or IP address with path
 const String serverName = "http://10.10.10.200:8000/";
- 
+
 // Keep this API Key value to be compatible with the PHP code provided in the project page.
 String apiKeyValue = "tPmAT5Ab3j7F9";
 
@@ -31,8 +31,8 @@ int32_t spo2; //SPO2 value
 int8_t validSPO2; //indicator to show if the SPO2 calculation is valid
 int32_t heartRate; //heart rate value
 int8_t validHeartRate; //indicator to show if the heart rate calculation is valid
-int spo2Limit; // sets limit for spo2 level to beep
-int addressSpo2Limit = 0;
+byte spo2Limit; // sets limit for spo2 level to beep
+byte addressSpo2Limit = 0;
 
 // create an OLED display object connected to I2C
 Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
@@ -46,14 +46,15 @@ Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 #define BTN_START 32
 #define BTN_MENU 33
 #define debounceTimeout 50
-int startButtonPreviousState = HIGH; // HI means NOT PRESSED
-int menuButtonPreviousState = LOW; // LO means PRESSED
+
+byte startButtonPreviousState = HIGH; // HI means NOT PRESSED
+byte menuButtonPreviousState = LOW; // LO means PRESSED
 long int lastDebounceTime;
 
 bool isBeep = true;
 bool isStart = false;
 bool initialReading = true;
-int optionSelected = 0;
+byte optionSelected = 0;
 String menuOption[] = {"WELCOME", "SET SPO2 LIMIT", "Machine Number", "WIFI"};
 char machineNumber[25];
 
@@ -113,9 +114,9 @@ void setup()
     delay(1500);
   }
 
-  byte ledBrightness = 255; //Options: 0=Off to 255=50mA
+  byte ledBrightness = 80; //Options: 0=Off to 255=50mA
   byte sampleAverage = 4; //Options: 1, 2, 4, 8, 16, 32
-  byte ledMode = 2; //Options: 1 = Red only, 2 = Red + IR, 3 = Red + IR + Green
+  byte ledMode = 3; //Options: 1 = Red only, 2 = Red + IR, 3 = Red + IR + Green
   byte sampleRate = 100; //Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
   int pulseWidth = 411; //Options: 69, 118, 215, 411
   int adcRange = 4096; //Options: 2048, 4096, 8192, 16384
@@ -123,7 +124,7 @@ void setup()
   particleSensor.setup(ledBrightness, sampleAverage, ledMode, sampleRate, pulseWidth, adcRange); //Configure sensor with these settings
   //  particleSensor.setup(); //Configure sensor with default settings
   particleSensor.setPulseAmplitudeRed(0x0A); //Turn Red LED to low to indicate sensor is running
-  particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
+  //particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
 
   //for WIFIMANAGER
   WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
@@ -221,6 +222,7 @@ void readPulse() {
       particleSensor.nextSample(); //We're finished with this sample so move to next sample
     }
     //calculate heart rate and SpO2 after first 100 samples (first 4 seconds of samples)
+    initialReading = false;
     maxim_heart_rate_and_oxygen_saturation(irBuffer, bufferLength, redBuffer, &spo2, &validSPO2, &heartRate, &validHeartRate);
   }
 
@@ -241,6 +243,18 @@ void readPulse() {
     redBuffer[i] = particleSensor.getRed();
     irBuffer[i] = particleSensor.getIR();
     particleSensor.nextSample(); //We're finished with this sample so move to next sample
+
+          Serial.print(F(", HR="));
+      Serial.print(heartRate, DEC);
+
+      Serial.print(F(", HRvalid="));
+      Serial.print(validHeartRate, DEC);
+
+      Serial.print(F(", SPO2="));
+      Serial.print(spo2, DEC);
+
+      Serial.print(F(", SPO2Valid="));
+      Serial.println(validSPO2, DEC);
   }
 
   //After gathering 25 new samples recalculate HR and SP02
@@ -257,13 +271,13 @@ void readPulse() {
       noTone(BUZZER);
     }
     isBeep = !isBeep;
+  } else {
+    noTone(BUZZER);
   }
-  
-  initialReading = false;
 
   // Send data to server
   if (validSPO2 == 1 && validHeartRate == 1) {
-    sendData(String(heartRate), String(spo2));
+    //sendData(String(heartRate), String(spo2));
   }
 }
 
@@ -395,7 +409,6 @@ void loop()
           spo2Limit--;
         update = true;
       }
-
       if (update) {
         EEPROM.write(addressSpo2Limit, spo2Limit);
         EEPROM.commit();
