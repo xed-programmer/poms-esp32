@@ -81,7 +81,7 @@ void setup()
   // initialize OLED display with I2C address 0x3C
   if (!oled.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("failed to start SSD1306 OLED"));
-    //    while (1);
+//    while (1);
   }
 
   oled.display();
@@ -147,20 +147,6 @@ void setup()
     oledPrint(0, 0, "Wifi connected...");
     Serial.println("Wifi connected...");
   }
-}
-
-String getParam(String name) {
-  //read parameter from server, for customhmtl input
-  String value;
-  if (wm.server->hasArg(name)) {
-    value = wm.server->arg(name);
-  }
-  return value;
-}
-
-void saveParamCallback() {
-  Serial.println("[CALLBACK] saveParamCallback fired");
-  Serial.println("PARAM customfieldid = " + getParam("customfieldid"));
 }
 
 void readPulse() {
@@ -268,17 +254,6 @@ void sendData(String hr, String spo2) {
   //Send an HTTP POST request every 30 seconds
 }
 
-void oledPrint(int x, int y, String message)
-{
-  oled.clearDisplay();
-  oled.setTextSize(1);         // set text size
-  oled.setTextColor(WHITE);    // set text color
-  oled.setCursor(x, y);
-  oled.println(message);
-  oled.display();
-  delay(1);
-}
-
 void loop()
 {
   // Read the button
@@ -348,4 +323,40 @@ void loop()
     oled.drawBitmap(100, 0, noWifiLogo, 16, 16, WHITE);
   }
   oled.display();
+}
+
+void oledPrint(int x, int y, String message)
+{
+  oled.clearDisplay();
+  oled.setTextSize(1);         // set text size
+  oled.setTextColor(WHITE);    // set text color
+  oled.setCursor(x, y);
+  oled.println(message);
+  oled.display();
+  delay(1);
+}
+
+void oledPrint(int x, int y, char* message)
+{
+  oled.clearDisplay();
+  oled.setTextSize(1);         // set text size
+  oled.setTextColor(WHITE);    // set text color
+  oled.setCursor(x, y);
+  oled.println(message);
+  oled.display();
+  delay(1);
+}
+
+String getParam(String name) {
+  //read parameter from server, for customhmtl input
+  String value;
+  if (wm.server->hasArg(name)) {
+    value = wm.server->arg(name);
+  }
+  return value;
+}
+
+void saveParamCallback() {
+  Serial.println("[CALLBACK] saveParamCallback fired");
+  Serial.println("PARAM customfieldid = " + getParam("customfieldid"));
 }
