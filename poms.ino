@@ -12,7 +12,7 @@
 #include "logos.h"
 
 // REPLACE with your Domain name and URL path or IP address with path
-const String serverName = "http://10.10.10.200:8000/";
+const String serverName = "http://192.168.1.18:8000/";
 
 // Keep this API Key value to be compatible with the PHP code provided in the project page.
 String apiKeyValue = "tPmAT5Ab3j7F9";
@@ -222,7 +222,7 @@ void readPulse() {
 
   // Send data to server
   if (validSPO2 == 1 && validHeartRate == 1) {
-    //sendData(String(heartRate), String(spo2));
+    sendData(String(heartRate), String(spo2));
   }
 }
 
@@ -240,7 +240,8 @@ void sendData(String hr, String spo2) {
     http.addHeader("Content-Type", "application/x-www-form-urlencoded");
 
     // Prepare your HTTP POST request data
-    String httpRequestData = "api_key=" + apiKeyValue + "&id=" + machineNumber + "&hr=" + hr + "&spo2=" + spo2 + "&spo2_limit=" + spo2Limit;
+    String httpRequestData = "api_key=" + apiKeyValue + "&id=" + machineNumber + "&hr=" + hr + "&spo2=" + spo2;
+    Serial.println(httpRequestData);
 
     // Send HTTP POST request
     int httpResponseCode = http.POST(httpRequestData);
@@ -277,6 +278,7 @@ void loop()
 
   // DISPLAY NG MENU
   if (!isStart) {
+    // REFACTOR MO YUNG PAGGDISPLAY NG SPO2, FROM PULSEREAD METHOD TO DITO SA CODE BLCOK NATO
     if (menuButtonPreviousState == LOW) {
       //menu is selected
       switch (optionSelected) {
@@ -318,11 +320,13 @@ void loop()
       } else {
         isStart = false;
         noTone(BUZZER);
-        delay(1000);
+        delay(1500);
       }
     } else if (menuButtonPressed == LOW) {
       noTone(BUZZER);
       menuButtonPreviousState = LOW;
+      initialReading = true;
+      isStart = true;
       optionSelected = (optionSelected < ARRAY_SIZE(menuOption) - 1) ? optionSelected + 1 : 0;
       delay(500);
     }
