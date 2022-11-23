@@ -3,7 +3,6 @@
 #include <WiFiClient.h>
 
 #include <WiFiManager.h>
-#include <EEPROM.h>
 
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -32,38 +31,31 @@ int32_t spo2; //SPO2 value
 int8_t validSPO2; //indicator to show if the SPO2 calculation is valid
 int32_t heartRate; //heart rate value
 int8_t validHeartRate; //indicator to show if the heart rate calculation is valid
-int spo2Limit; // sets limit for spo2 level to beep
-int addressSpo2Limit = 0;
+const byte spo2Limit = 90;
 
 // create an OLED display object connected to I2C
 Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
-// define the number of bytes you want to access
-#define EEPROM_SIZE 1
-
 #define BUZZER 10
-#define BTN_START D4
-#define BTN_MENU D7
-#define BTN_UP D6
-#define BTN_DOWN D5
+#define BTN_START D5
+#define BTN_MENU D6
 #define debounceTimeout 50
-int startButtonPreviousState = HIGH; // HI means NOT PRESSED
-int menuButtonPreviousState = LOW; // LO means PRESSED
+
+byte startButtonPressed, menuButtonPressed;
+byte startButtonPreviousState = HIGH; // HI means NOT PRESSED
+byte menuButtonPreviousState = LOW; // LO means PRESSED
 long int lastDebounceTime;
 
 bool isBeep = true;
 bool isStart = false;
 bool initialReading = true;
-int optionSelected = 0;
-String menuOption[] = {"WELCOME", "SET SPO2 LIMIT", "Machine Number", "WIFI"};
+byte optionSelected = 0;
+String menuOption[] = {"WELCOME", "Machine Number"};
 char machineNumber[25];
-
-#define TRIGGER_PIN 0
 
 // wifimanager can run in a blocking mode or a non blocking mode
 // Be sure to know how to process loops with no delay() if using non blocking
 bool wm_nonblocking = false; // change to true to use non blocking
-
 
 WiFiManager wm; // global wm instance
 WiFiManagerParameter custom_field; // global param ( for non blocking w params )
@@ -73,23 +65,10 @@ void setup()
   Serial.begin(115200); // initialize serial communication at 115200 bits per second:
   // Set Machine Number
   snprintf(machineNumber, 25, "DEVICE-%llX", WiFi.macAddress());
-  // initialize EEPROM with predefined size
-  EEPROM.begin(EEPROM_SIZE);
 
   pinMode(BUZZER, OUTPUT);
-  pinMode(BTN_UP, INPUT);
-  pinMode(BTN_DOWN, INPUT);
-  pinMode(BTN_START, INPUT);
-  pinMode(BTN_MENU, INPUT);
-
-  // Get the SPO2Limit Value
-  spo2Limit = EEPROM.read(addressSpo2Limit);
-  if (spo2Limit <= 0 || spo2Limit > 100) {
-    // set a default spo2limit
-    spo2Limit = 90;
-    EEPROM.write(addressSpo2Limit, spo2Limit);
-    EEPROM.commit();
-  }
+  pinMode(BTN_START, INPUT_PULLUP);
+  pinMode(BTN_MENU, INPUT_PULLUP);
 
   // initialize OLED display with I2C address 0x3C
   if (!oled.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
@@ -153,37 +132,6 @@ void setup()
     Serial.println("Wifi connected...");
   }
 }
-void checkButton() {
-  // check for button press
-  if (digitalRead(BTN_UP) == LOW) {
-    // poor mans debounce/press-hold, code not ideal for production
-    delay(50);
-    if (digitalRead(BTN_UP) == LOW) {
-      Serial.println("Button Pressed");
-      // still holding button for 3000 ms, reset settings, code not ideaa for production
-      delay(3000); // reset delay hold
-      if ( digitalRead(BTN_UP) == LOW) {
-        Serial.println("Button Held");
-        Serial.println("Erasing Config, restarting");
-        wm.resetSettings();
-        ESP.restart();
-      }
-
-      // start portal w delay
-      Serial.println("Starting config portal");
-      wm.setConfigPortalTimeout(120);
-
-      if (!wm.startConfigPortal((const char*)machineNumber, "password")) {
-        Serial.println("failed to connect or hit timeout");
-        delay(3000);
-        // ESP.restart();
-      } else {
-        //if you get here you have connected to the WiFi
-        Serial.println("connected...yeey :)");
-      }
-    }
-  }
-}
 
 String getParam(String name) {
   //read parameter from server, for customhmtl input
@@ -209,10 +157,16 @@ void readPulse() {
         particleSensor.check(); //Check the sensor for new data
 
       oledPrint(0, 0, "INITIAL READING...\nPlease Wait");
+
       redBuffer[i] = particleSensor.getRed();
       irBuffer[i] = particleSensor.getIR();
+      Serial.print(F("red="));
+      Serial.print(redBuffer[i], DEC);
+      Serial.print(F(", ir="));
+      Serial.println(irBuffer[i], DEC);
       particleSensor.nextSample(); //We're finished with this sample so move to next sample
     }
+    initialReading = false;
     //calculate heart rate and SpO2 after first 100 samples (first 4 seconds of samples)
     maxim_heart_rate_and_oxygen_saturation(irBuffer, bufferLength, redBuffer, &spo2, &validSPO2, &heartRate, &validHeartRate);
   }
@@ -234,6 +188,18 @@ void readPulse() {
     redBuffer[i] = particleSensor.getRed();
     irBuffer[i] = particleSensor.getIR();
     particleSensor.nextSample(); //We're finished with this sample so move to next sample
+
+    Serial.print(F("HR="));
+    Serial.print(heartRate, DEC);
+
+    Serial.print(F(", HRvalid="));
+    Serial.print(validHeartRate, DEC);
+
+    Serial.print(F(", SPO2="));
+    Serial.print(spo2, DEC);
+
+    Serial.print(F(", SPO2Valid="));
+    Serial.println(validSPO2, DEC);
   }
 
   //After gathering 25 new samples recalculate HR and SP02
@@ -250,13 +216,13 @@ void readPulse() {
       noTone(BUZZER);
     }
     isBeep = !isBeep;
+  } else {
+    noTone(BUZZER);
   }
-
-  initialReading = false;
 
   // Send data to server
   if (validSPO2 == 1 && validHeartRate == 1) {
-    sendData(String(heartRate), String(spo2));
+    //sendData(String(heartRate), String(spo2));
   }
 }
 
@@ -285,7 +251,6 @@ void sendData(String hr, String spo2) {
   else {
     Serial.println("WiFi Disconnected");
   }
-  //Send an HTTP POST request every 30 seconds
 }
 
 void oledPrint(int x, int y, String message)
@@ -302,20 +267,14 @@ void oledPrint(int x, int y, String message)
 void loop()
 {
   // Read the button
-  int startButtonPressed = digitalRead(BTN_START);
-  int menuButtonPressed = digitalRead(BTN_MENU);
-  int upButtonPressed = digitalRead(BTN_UP);
-  int downButtonPressed = digitalRead(BTN_DOWN);
+  startButtonPressed = digitalRead(BTN_START);
+  menuButtonPressed = digitalRead(BTN_MENU);
 
-  Serial.print("Start: ");
+  Serial.print("Start Button: ");
   Serial.println(startButtonPressed);
-  Serial.print("Menue: ");
+  Serial.print("Menu Button: ");
   Serial.println(menuButtonPressed);
-  Serial.print("Up: ");
-  Serial.println(upButtonPressed);
-  Serial.print("Down: ");
-  Serial.println(downButtonPressed);
-  
+
   // DISPLAY NG MENU
   if (!isStart) {
     if (menuButtonPreviousState == LOW) {
@@ -323,28 +282,9 @@ void loop()
       switch (optionSelected) {
         case 1:
           {
-            // SET SPO2 LIMIT
-            String msg = menuOption[optionSelected] + "\n\tSPO2 Level:" + spo2Limit + "%";
-            oledPrint(0, 0, msg);
-            break;
-          }
-        case 2:
-          {
             // DISPLAY NG MACHINE NUMBER
             String msg = menuOption[optionSelected] + "\n\t" + String(machineNumber);
             oledPrint(0, 0, msg);
-            break;
-          }
-        case 3:
-          {
-            // IIIRESET NG WIFI
-            String msg = menuOption[optionSelected];
-            oledPrint(0, 0, msg);
-            oled.setCursor(0, 10);
-            oled.print("PRESS UP BTN TO RESTART WIFI");
-            oled.display();
-            if (wm_nonblocking) wm.process(); // avoid delays() in loop when non-blocking and other long running code
-//            checkButton();
             break;
           }
         case 0:
@@ -358,10 +298,10 @@ void loop()
     }
   }
 
-    // Get the current time
+  // Get the current time
   long int currentTime = millis();
   // check if button is not press
-  if (startButtonPressed == HIGH && menuButtonPressed == HIGH && upButtonPressed == HIGH && downButtonPressed == HIGH) {
+  if (startButtonPressed == HIGH && menuButtonPressed == HIGH) {
     lastDebounceTime = currentTime;
     startButtonPreviousState = HIGH;
   }
@@ -385,23 +325,6 @@ void loop()
       menuButtonPreviousState = LOW;
       optionSelected = (optionSelected < ARRAY_SIZE(menuOption) - 1) ? optionSelected + 1 : 0;
       delay(500);
-    } else if (menuButtonPreviousState == LOW && optionSelected == 1) {
-      bool update = false;
-      if (upButtonPressed == LOW) {
-        if (spo2Limit < 100)
-          spo2Limit++;
-        update = true;
-      } else if (downButtonPressed == LOW) {
-        if (spo2Limit > 90)
-          spo2Limit--;
-        update = true;
-      }
-
-      if (update) {
-        EEPROM.write(addressSpo2Limit, spo2Limit);
-        EEPROM.commit();
-        delay(500);
-      }
     }
   }
 
