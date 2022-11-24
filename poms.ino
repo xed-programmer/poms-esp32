@@ -20,6 +20,7 @@ String apiKeyValue = "tPmAT5Ab3j7F9";
 MAX30105 particleSensor;
 #define SCREEN_WIDTH 128 // OLED width,  in pixels
 #define SCREEN_HEIGHT 64 // OLED height, in pixels
+const byte NOTIF_BORDER = LOGO_SIZE;
 
 #define ARRAY_SIZE(x) sizeof(x)/sizeof(x[0])
 
@@ -93,6 +94,14 @@ void setup()
     delay(5000);
   }
 
+//    byte ledBrightness = 60; //Options: 0=Off to 255=50mA
+//    byte sampleAverage = 4; //Options: 1, 2, 4, 8, 16, 32
+//    byte ledMode = 2; //Options: 1 = Red only, 2 = Red + IR, 3 = Red + IR + Green
+//    byte sampleRate = 100; //Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
+//    int pulseWidth = 411; //Options: 69, 118, 215, 411
+//    int adcRange = 4096; //Options: 2048, 4096, 8192, 16384
+//  
+//    particleSensor.setup(ledBrightness, sampleAverage, ledMode, sampleRate, pulseWidth, adcRange); //Configure sensor with these settings
   particleSensor.setup(); //Configure sensor with default settings
   particleSensor.setPulseAmplitudeRed(0x0A); //Turn Red LED to low to indicate sensor is running
   particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
@@ -145,6 +154,89 @@ String getParam(String name) {
 void saveParamCallback() {
   Serial.println("[CALLBACK] saveParamCallback fired");
   Serial.println("PARAM customfieldid = " + getParam("customfieldid"));
+}
+
+void loop()
+{
+  // Read the button
+  startButtonPressed = digitalRead(BTN_START);
+  menuButtonPressed = digitalRead(BTN_MENU);
+
+  //  // DISPLAY NG MENU
+  menu();
+  //  // CHECK IF BUTTON CLICKED
+  checkButtonClicked();
+
+  if (isStart) {
+    readPulse();
+    displayPulseReading();
+  }
+  //DISPLAY NG WIFI LOGO
+  if (WiFi.status() == WL_CONNECTED) {
+    oled.drawBitmap(SCREEN_WIDTH - LOGO_SIZE, 0, wifiLogo, LOGO_SIZE, LOGO_SIZE, 1);
+  } else {
+    oled.drawBitmap(SCREEN_WIDTH - LOGO_SIZE, 0, noWifiLogo, LOGO_SIZE, LOGO_SIZE, 1);
+  }
+  oled.display();
+}
+
+void menu() {
+  if (!isStart) {
+    // REFACTOR MO YUNG PAGGDISPLAY NG SPO2, FROM PULSEREAD METHOD TO DITO SA CODE BLCOK NATO
+    if (menuButtonPreviousState == LOW) {
+      //menu is selected
+      switch (optionSelected) {
+        case 1:
+          {
+            // DISPLAY NG MACHINE NUMBER
+            String msg = menuOption[optionSelected] + "\n\t" + String(machineNumber);
+            oledPrint(0, 0, msg);
+            break;
+          }
+        case 0:
+        default:
+          {
+            // welcome
+            oledPrint(0, 0, menuOption[optionSelected]);
+            break;
+          }
+      }
+    }
+  }
+}
+
+void checkButtonClicked() {
+  // Get the current time
+  long int currentTime = millis();
+  // check if button is not press
+  if (startButtonPressed == HIGH && menuButtonPressed == HIGH) {
+    lastDebounceTime = currentTime;
+    startButtonPreviousState = HIGH;
+  }
+
+  // CHECK KUNG NA CLICK NA IYUNG BUTTON
+  if ((currentTime - lastDebounceTime) > debounceTimeout) {
+    // Button is pressed
+    if (startButtonPressed == LOW) {
+      // START/STOP Button is pressed
+      menuButtonPreviousState = HIGH;
+      if (!isStart) {
+        initialReading = true;
+        isStart = true;
+      } else {
+        isStart = false;
+        noTone(BUZZER);
+        delay(1500);
+      }
+    } else if (menuButtonPressed == LOW) {
+      noTone(BUZZER);
+      menuButtonPreviousState = LOW;
+      initialReading = true;
+      isStart = true;
+      optionSelected = (optionSelected < ARRAY_SIZE(menuOption) - 1) ? optionSelected + 1 : 0;
+      delay(500);
+    }
+  }
 }
 
 void readPulse() {
@@ -205,8 +297,6 @@ void readPulse() {
   //After gathering 25 new samples recalculate HR and SP02
   maxim_heart_rate_and_oxygen_saturation(irBuffer, bufferLength, redBuffer, &spo2, &validSPO2, &heartRate, &validHeartRate);
   // Display HR and SPO2 in OLED
-  String message = "HR=" + String(heartRate) + "\n" + "SPO2=" + String(spo2) + "%";
-  oledPrint(0, 0, message);
 
   if (spo2 < spo2Limit) {
     if (isBeep) {
@@ -254,6 +344,35 @@ void sendData(String hr, String spo2) {
   }
 }
 
+void displayPulseReading() {
+  // DISPLAY HR AND SPO2 READINGS
+
+  oled.clearDisplay();
+
+  oled.setTextSize(2);
+  oled.setTextColor(WHITE);
+  oled.setCursor(5, NOTIF_BORDER);
+  oled.println("HR");
+
+  oled.setTextSize(2);
+  oled.setTextColor(WHITE);
+  oled.setCursor(5, NOTIF_BORDER + (6 * 3));
+  oled.println("SPO2");
+
+  oled.setTextSize(2);
+  oled.setTextColor(WHITE);
+  oled.setCursor(SCREEN_WIDTH / 2, NOTIF_BORDER);
+  oled.println(heartRate);
+
+  oled.setTextSize(2);
+  oled.setTextColor(WHITE);
+  oled.setCursor(SCREEN_WIDTH / 2, NOTIF_BORDER + (6 * 3));
+  oled.println(String(spo2) + "%");
+
+  oled.display();
+  delay(1);
+}
+
 void oledPrint(int x, int y, String message)
 {
   oled.clearDisplay();
@@ -263,83 +382,4 @@ void oledPrint(int x, int y, String message)
   oled.println(message);
   oled.display();
   delay(1);
-}
-
-void loop()
-{
-  // Read the button
-  startButtonPressed = digitalRead(BTN_START);
-  menuButtonPressed = digitalRead(BTN_MENU);
-
-  Serial.print("Start Button: ");
-  Serial.println(startButtonPressed);
-  Serial.print("Menu Button: ");
-  Serial.println(menuButtonPressed);
-
-  // DISPLAY NG MENU
-  if (!isStart) {
-    // REFACTOR MO YUNG PAGGDISPLAY NG SPO2, FROM PULSEREAD METHOD TO DITO SA CODE BLCOK NATO
-    if (menuButtonPreviousState == LOW) {
-      //menu is selected
-      switch (optionSelected) {
-        case 1:
-          {
-            // DISPLAY NG MACHINE NUMBER
-            String msg = menuOption[optionSelected] + "\n\t" + String(machineNumber);
-            oledPrint(0, 0, msg);
-            break;
-          }
-        case 0:
-        default:
-          {
-            // welcome
-            oledPrint(0, 0, menuOption[optionSelected]);
-            break;
-          }
-      }
-    }
-  }
-
-  // Get the current time
-  long int currentTime = millis();
-  // check if button is not press
-  if (startButtonPressed == HIGH && menuButtonPressed == HIGH) {
-    lastDebounceTime = currentTime;
-    startButtonPreviousState = HIGH;
-  }
-
-  // CHECK KUNG NA CLICK NA IYUNG BUTTON
-  if ((currentTime - lastDebounceTime) > debounceTimeout) {
-    // Button is pressed
-    if (startButtonPressed == LOW) {
-      // START/STOP Button is pressed
-      menuButtonPreviousState = HIGH;
-      if (!isStart) {
-        initialReading = true;
-        isStart = true;
-      } else {
-        isStart = false;
-        noTone(BUZZER);
-        delay(1500);
-      }
-    } else if (menuButtonPressed == LOW) {
-      noTone(BUZZER);
-      menuButtonPreviousState = LOW;
-      initialReading = true;
-      isStart = true;
-      optionSelected = (optionSelected < ARRAY_SIZE(menuOption) - 1) ? optionSelected + 1 : 0;
-      delay(500);
-    }
-  }
-
-  if (isStart) {
-    readPulse();
-  }
-  //DISPLAY NG WIFI LOGO
-  if (WiFi.status() == WL_CONNECTED) {
-    oled.drawBitmap(100, 0, wifiLogo, 16, 16, WHITE);
-  } else {
-    oled.drawBitmap(100, 0, noWifiLogo, 16, 16, WHITE);
-  }
-  oled.display();
 }
