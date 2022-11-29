@@ -7,8 +7,30 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include "MAX30105.h"
-#include "spo2_algorithm.h"
+#include <MAX3010x.h>
+#include "filters.h"
+
+// Sensor (adjust to your sensor type)
+MAX30105 sensor;
+const auto kSamplingRate = sensor.SAMPLING_RATE_400SPS;
+const float kSamplingFrequency = 400.0;
+
+// Finger Detection Threshold and Cooldown
+const unsigned long kFingerThreshold = 10000;
+const unsigned int kFingerCooldownMs = 500;
+
+// Edge Detection Threshold (decrease for MAX30100)
+const float kEdgeThreshold = -2000.0;
+
+// Filters
+const float kLowPassCutoff = 5.0;
+const float kHighPassCutoff = 0.5;
+
+// Averaging
+const bool kEnableAveraging = false;
+const int kAveragingSamples = 5;
+const int kSampleThreshold = 5;
+
 #include "logos.h"
 
 // REPLACE with your Domain name and URL path or IP address with path
@@ -17,7 +39,6 @@ const String serverName = "http://192.168.1.18:8000/";
 // Keep this API Key value to be compatible with the PHP code provided in the project page.
 String apiKeyValue = "tPmAT5Ab3j7F9";
 
-MAX30105 particleSensor;
 #define SCREEN_WIDTH 128 // OLED width,  in pixels
 #define SCREEN_HEIGHT 64 // OLED height, in pixels
 const byte NOTIF_BORDER = LOGO_SIZE;
@@ -37,7 +58,7 @@ const byte spo2Limit = 90;
 // create an OLED display object connected to I2C
 Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
-#define BUZZER 10
+//#define BUZZER 10
 #define BTN_START D5
 #define BTN_MENU D6
 #define debounceTimeout 50
@@ -82,8 +103,11 @@ void setup()
   oled.clearDisplay();
 
   // Initialize sensor
-  if (!particleSensor.begin(Wire, I2C_SPEED_FAST)) //Use default I2C port, 400kHz speed
-  {
+  if (sensor.begin() && sensor.setSamplingRate(kSamplingRate)) {
+    Serial.println("Sensor initialized");
+
+  }
+  else {    
     Serial.println(F("MAX30105 was not found. Please check wiring/power."));
     oled.clearDisplay();
     oled.setTextSize(1);         // set text size
@@ -91,20 +115,8 @@ void setup()
     oled.setCursor(0, 0);
     oled.println(F("MAX30105 was not found. Please check wiring/power."));
     oled.display();
-    delay(5000);
+    delay(5000);    
   }
-
-//    byte ledBrightness = 60; //Options: 0=Off to 255=50mA
-//    byte sampleAverage = 4; //Options: 1, 2, 4, 8, 16, 32
-//    byte ledMode = 2; //Options: 1 = Red only, 2 = Red + IR, 3 = Red + IR + Green
-//    byte sampleRate = 100; //Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
-//    int pulseWidth = 411; //Options: 69, 118, 215, 411
-//    int adcRange = 4096; //Options: 2048, 4096, 8192, 16384
-//  
-//    particleSensor.setup(ledBrightness, sampleAverage, ledMode, sampleRate, pulseWidth, adcRange); //Configure sensor with these settings
-  particleSensor.setup(); //Configure sensor with default settings
-  particleSensor.setPulseAmplitudeRed(0x0A); //Turn Red LED to low to indicate sensor is running
-  particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
 
   //for WIFIMANAGER
   WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
@@ -141,6 +153,37 @@ void setup()
     Serial.println("Wifi connected...");
   }
 }
+
+// Filter Instances
+LowPassFilter low_pass_filter_red(kLowPassCutoff, kSamplingFrequency);
+LowPassFilter low_pass_filter_ir(kLowPassCutoff, kSamplingFrequency);
+HighPassFilter high_pass_filter(kHighPassCutoff, kSamplingFrequency);
+Differentiator differentiator(kSamplingFrequency);
+MovingAverageFilter<kAveragingSamples> averager_bpm;
+MovingAverageFilter<kAveragingSamples> averager_r;
+MovingAverageFilter<kAveragingSamples> averager_spo2;
+
+// Statistic for pulse oximetry
+MinMaxAvgStatistic stat_red;
+MinMaxAvgStatistic stat_ir;
+
+// R value to SpO2 calibration factors
+// See https://www.maximintegrated.com/en/design/technical-documents/app-notes/6/6845.html
+float kSpO2_A = 1.5958422;
+float kSpO2_B = -34.6596622;
+float kSpO2_C = 112.6898759;
+
+// Timestamp of the last heartbeat
+long last_heartbeat = 0;
+
+// Timestamp for finger detection
+long finger_timestamp = 0;
+bool finger_detected = false;
+
+// Last diff to detect zero crossing
+float last_diff = NAN;
+bool crossed = false;
+long crossed_time = 0;
 
 String getParam(String name) {
   //read parameter from server, for customhmtl input
