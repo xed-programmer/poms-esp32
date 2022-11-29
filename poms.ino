@@ -67,11 +67,12 @@ void setup()
   // Set Machine Number
   snprintf(machineNumber, 25, "DEVICE-%llX", WiFi.macAddress());
 
-  pinMode(BUZZER, OUTPUT);
+//  pinMode(BUZZER, OUTPUT);
   pinMode(BTN_START, INPUT_PULLUP);
   pinMode(BTN_MENU, INPUT_PULLUP);
 
   // initialize OLED display with I2C address 0x3C
+  //< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
   if (!oled.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("failed to start SSD1306 OLED"));
     while (1);
