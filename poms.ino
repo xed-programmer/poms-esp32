@@ -83,7 +83,7 @@ void setup()
   oled.clearDisplay();
 
   // Initialize sensor
-  if (!particleSensor.begin(Wire, I2C_SPEED_FAST)) //Use default I2C port, 400kHz speed
+  if (!particleSensor.begin(Wire)) //Use default I2C port, 400kHz speed
   {
     Serial.println(F("MAX30105 was not found. Please check wiring/power."));
     oled.clearDisplay();
@@ -95,52 +95,52 @@ void setup()
     delay(5000);
   }
 
-//    byte ledBrightness = 60; //Options: 0=Off to 255=50mA
-//    byte sampleAverage = 4; //Options: 1, 2, 4, 8, 16, 32
-//    byte ledMode = 2; //Options: 1 = Red only, 2 = Red + IR, 3 = Red + IR + Green
-//    byte sampleRate = 100; //Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
-//    int pulseWidth = 411; //Options: 69, 118, 215, 411
-//    int adcRange = 4096; //Options: 2048, 4096, 8192, 16384
-//  
-//    particleSensor.setup(ledBrightness, sampleAverage, ledMode, sampleRate, pulseWidth, adcRange); //Configure sensor with these settings
-  particleSensor.setup(); //Configure sensor with default settings
-  particleSensor.setPulseAmplitudeRed(0x0A); //Turn Red LED to low to indicate sensor is running
-  particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
+    byte ledBrightness = 100; //Options: 0=Off to 255=50mA
+    byte sampleAverage = 4; //Options: 1, 2, 4, 8, 16, 32
+    byte ledMode = 2; //Options: 1 = Red only, 2 = Red + IR, 3 = Red + IR + Green
+    byte sampleRate = 1600; //Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
+    int pulseWidth = 411; //Options: 69, 118, 215, 411
+    int adcRange = 4096; //Options: 2048, 4096, 8192, 16384
+  
+    particleSensor.setup(ledBrightness, sampleAverage, ledMode, sampleRate, pulseWidth, adcRange); //Configure sensor with these settings
+//  particleSensor.setup(); //Configure sensor with default settings
+//  particleSensor.setPulseAmplitudeRed(0x0A); //Turn Red LED to low to indicate sensor is running
+//  particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
 
-  //for WIFIMANAGER
-  WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
-  if (wm_nonblocking) wm.setConfigPortalBlocking(false);
-
-  // add a custom input field
-  int customFieldLength = 40;
-  const char* custom_radio_str = "<br/><label for='customfieldid'>Custom Field Label</label><input type='radio' name='customfieldid' value='1' checked> One<br><input type='radio' name='customfieldid' value='2'> Two<br><input type='radio' name='customfieldid' value='3'> Three";
-  new (&custom_field) WiFiManagerParameter(custom_radio_str); // custom html input
-
-  wm.addParameter(&custom_field);
-  wm.setSaveParamsCallback(saveParamCallback);
-
-  std::vector<const char *> menu = {"wifi", "info", "param", "sep", "restart", "exit"};
-  wm.setMenu(menu);
-
-  // set dark theme
-  wm.setClass("invert");
-
-  wm.setConfigPortalTimeout(30); // auto close configportal after n seconds
-
-  bool res;
-  // ITO YUNG WIFI HOTSPOT PARA PALITAN ANG WIFI CREDENTIALS
-  res = wm.autoConnect((const char*)machineNumber, "password"); // password protected ap
-
-  if (!res) {
-    oledPrint(0, 0, "Failed to connect or hit timeout");
-    Serial.println("Failed to connect or hit timeout");
-    // ESP.restart();
-  }
-  else {
-    //if you get here you have connected to the WiFi
-    oledPrint(0, 0, "Wifi connected...");
-    Serial.println("Wifi connected...");
-  }
+//  //for WIFIMANAGER
+//  WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
+//  if (wm_nonblocking) wm.setConfigPortalBlocking(false);
+//
+//  // add a custom input field
+//  int customFieldLength = 40;
+//  const char* custom_radio_str = "<br/><label for='customfieldid'>Custom Field Label</label><input type='radio' name='customfieldid' value='1' checked> One<br><input type='radio' name='customfieldid' value='2'> Two<br><input type='radio' name='customfieldid' value='3'> Three";
+//  new (&custom_field) WiFiManagerParameter(custom_radio_str); // custom html input
+//
+//  wm.addParameter(&custom_field);
+//  wm.setSaveParamsCallback(saveParamCallback);
+//
+//  std::vector<const char *> menu = {"wifi", "info", "param", "sep", "restart", "exit"};
+//  wm.setMenu(menu);
+//
+//  // set dark theme
+//  wm.setClass("invert");
+//
+//  wm.setConfigPortalTimeout(30); // auto close configportal after n seconds
+//
+//  bool res;
+//  // ITO YUNG WIFI HOTSPOT PARA PALITAN ANG WIFI CREDENTIALS
+//  res = wm.autoConnect((const char*)machineNumber, "password"); // password protected ap
+//
+//  if (!res) {
+//    oledPrint(0, 0, "Failed to connect or hit timeout");
+//    Serial.println("Failed to connect or hit timeout");
+//    // ESP.restart();
+//  }
+//  else {
+//    //if you get here you have connected to the WiFi
+//    oledPrint(0, 0, "Wifi connected...");
+//    Serial.println("Wifi connected...");
+//  }
 }
 
 String getParam(String name) {
