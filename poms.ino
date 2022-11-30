@@ -1,31 +1,25 @@
-#include <ESP8266WiFi.h>
-#include <ESP8266HTTPClient.h>
-#include <WiFiClient.h>
-
-#include <WiFiManager.h>
-
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include "MAX30105.h"
 #include "spo2_algorithm.h"
-#include "logos.h"
-
-// REPLACE with your Domain name and URL path or IP address with path
-const String serverName = "http://192.168.1.18:8000/";
-
-// Keep this API Key value to be compatible with the PHP code provided in the project page.
-String apiKeyValue = "tPmAT5Ab3j7F9";
 
 MAX30105 particleSensor;
 #define SCREEN_WIDTH 128 // OLED width,  in pixels
 #define SCREEN_HEIGHT 64 // OLED height, in pixels
-const byte NOTIF_BORDER = LOGO_SIZE;
+const byte NOTIF_BORDER = 0;
 
 #define ARRAY_SIZE(x) sizeof(x)/sizeof(x[0])
 
+#define MAX_BRIGHTNESS 255
+
+#if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
+uint16_t irBuffer[100]; //infrared LED sensor data
+uint16_t redBuffer[100];  //red LED sensor data
+#else
 uint32_t irBuffer[100]; //infrared LED sensor data
 uint32_t redBuffer[100];  //red LED sensor data
+#endif
 
 int32_t bufferLength; //data length
 int32_t spo2; //SPO2 value
@@ -38,8 +32,8 @@ const byte spo2Limit = 90;
 Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 #define BUZZER 10
-#define BTN_START D5
-#define BTN_MENU D6
+#define BTN_MENU 9
+#define BTN_START 8
 #define debounceTimeout 50
 
 byte startButtonPressed, menuButtonPressed;
@@ -54,19 +48,9 @@ byte optionSelected = 0;
 String menuOption[] = {"WELCOME", "Machine Number"};
 char machineNumber[25];
 
-// wifimanager can run in a blocking mode or a non blocking mode
-// Be sure to know how to process loops with no delay() if using non blocking
-bool wm_nonblocking = false; // change to true to use non blocking
-
-WiFiManager wm; // global wm instance
-WiFiManagerParameter custom_field; // global param ( for non blocking w params )
-
 void setup()
 {
   Serial.begin(115200); // initialize serial communication at 115200 bits per second:
-  // Set Machine Number
-  snprintf(machineNumber, 25, "DEVICE-%llX", WiFi.macAddress());
-
 //  pinMode(BUZZER, OUTPUT);
   pinMode(BTN_START, INPUT_PULLUP);
   pinMode(BTN_MENU, INPUT_PULLUP);
@@ -83,7 +67,8 @@ void setup()
   oled.clearDisplay();
 
   // Initialize sensor
-  if (!particleSensor.begin(Wire)) //Use default I2C port, 400kHz speed
+//  if (!particleSensor.begin(Wire, (uint32_t)400000)) //Use default I2C port, 400kHz speed
+  if (!particleSensor.begin(Wire, I2C_SPEED_FAST)) //Use default I2C port, 400kHz speed
   {
     Serial.println(F("MAX30105 was not found. Please check wiring/power."));
     oled.clearDisplay();
@@ -98,7 +83,7 @@ void setup()
     byte ledBrightness = 100; //Options: 0=Off to 255=50mA
     byte sampleAverage = 4; //Options: 1, 2, 4, 8, 16, 32
     byte ledMode = 2; //Options: 1 = Red only, 2 = Red + IR, 3 = Red + IR + Green
-    byte sampleRate = 1600; //Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
+    byte sampleRate = 100; //Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
     int pulseWidth = 411; //Options: 69, 118, 215, 411
     int adcRange = 4096; //Options: 2048, 4096, 8192, 16384
   
@@ -106,55 +91,6 @@ void setup()
 //  particleSensor.setup(); //Configure sensor with default settings
 //  particleSensor.setPulseAmplitudeRed(0x0A); //Turn Red LED to low to indicate sensor is running
 //  particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
-
-//  //for WIFIMANAGER
-//  WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
-//  if (wm_nonblocking) wm.setConfigPortalBlocking(false);
-//
-//  // add a custom input field
-//  int customFieldLength = 40;
-//  const char* custom_radio_str = "<br/><label for='customfieldid'>Custom Field Label</label><input type='radio' name='customfieldid' value='1' checked> One<br><input type='radio' name='customfieldid' value='2'> Two<br><input type='radio' name='customfieldid' value='3'> Three";
-//  new (&custom_field) WiFiManagerParameter(custom_radio_str); // custom html input
-//
-//  wm.addParameter(&custom_field);
-//  wm.setSaveParamsCallback(saveParamCallback);
-//
-//  std::vector<const char *> menu = {"wifi", "info", "param", "sep", "restart", "exit"};
-//  wm.setMenu(menu);
-//
-//  // set dark theme
-//  wm.setClass("invert");
-//
-//  wm.setConfigPortalTimeout(30); // auto close configportal after n seconds
-//
-//  bool res;
-//  // ITO YUNG WIFI HOTSPOT PARA PALITAN ANG WIFI CREDENTIALS
-//  res = wm.autoConnect((const char*)machineNumber, "password"); // password protected ap
-//
-//  if (!res) {
-//    oledPrint(0, 0, "Failed to connect or hit timeout");
-//    Serial.println("Failed to connect or hit timeout");
-//    // ESP.restart();
-//  }
-//  else {
-//    //if you get here you have connected to the WiFi
-//    oledPrint(0, 0, "Wifi connected...");
-//    Serial.println("Wifi connected...");
-//  }
-}
-
-String getParam(String name) {
-  //read parameter from server, for customhmtl input
-  String value;
-  if (wm.server->hasArg(name)) {
-    value = wm.server->arg(name);
-  }
-  return value;
-}
-
-void saveParamCallback() {
-  Serial.println("[CALLBACK] saveParamCallback fired");
-  Serial.println("PARAM customfieldid = " + getParam("customfieldid"));
 }
 
 void loop()
@@ -172,13 +108,6 @@ void loop()
     readPulse();
     displayPulseReading();
   }
-  //DISPLAY NG WIFI LOGO
-  if (WiFi.status() == WL_CONNECTED) {
-    oled.drawBitmap(SCREEN_WIDTH - LOGO_SIZE, 0, wifiLogo, LOGO_SIZE, LOGO_SIZE, 1);
-  } else {
-    oled.drawBitmap(SCREEN_WIDTH - LOGO_SIZE, 0, noWifiLogo, LOGO_SIZE, LOGO_SIZE, 1);
-  }
-  oled.display();
 }
 
 void menu() {
@@ -313,38 +242,9 @@ void readPulse() {
 
   // Send data to server
   if (validSPO2 == 1 && validHeartRate == 1) {
-    sendData(String(heartRate), String(spo2));
+//    sendData(String(heartRate), String(spo2));
   }
 }
-
-void sendData(String hr, String spo2) {
-  // SESEND NG DATA FROM DEVICE TO WEB SERVER
-  //PAG NAKA KONEK, MAGSESEND
-  if (WiFi.status() == WL_CONNECTED) {
-    WiFiClient client;
-    HTTPClient http;
-
-    // Your Domain name with URL path or IP address with path
-    http.begin(client, serverName + "api/pulse-data");
-
-    // Specify content-type header
-    http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-
-    // Prepare your HTTP POST request data
-    String httpRequestData = "api_key=" + apiKeyValue + "&id=" + machineNumber + "&hr=" + hr + "&spo2=" + spo2;
-    Serial.println(httpRequestData);
-
-    // Send HTTP POST request
-    int httpResponseCode = http.POST(httpRequestData);
-    Serial.println(httpResponseCode);
-    // Free resources
-    http.end();
-  }
-  else {
-    Serial.println("WiFi Disconnected");
-  }
-}
-
 void displayPulseReading() {
   // DISPLAY HR AND SPO2 READINGS
 
