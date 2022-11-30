@@ -19,6 +19,7 @@ String apiKeyValue = "tPmAT5Ab3j7F9";
 MAX30105 particleSensor;
 #define SCREEN_WIDTH 128 // OLED width,  in pixels
 #define SCREEN_HEIGHT 64 // OLED height, in pixels
+const byte NOTIF_BORDER = LOGO_SIZE;
 
 #define ARRAY_SIZE(x) sizeof(x)/sizeof(x[0])
 
@@ -43,7 +44,7 @@ byte spo2Limit = 90; // sets limit for spo2 level to beep
 Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 #define BUZZER 16
-#define BTN_START P32
+#define BTN_START 32
 #define BTN_MENU 33
 #define debounceTimeout 50
 
@@ -72,7 +73,7 @@ void setup()
 {
   Serial.begin(115200); // initialize serial communication at 115200 bits per second:
   // Set Machine Number
-  snprintf(machineNumber, 25, "DEVICE-%llX", ESP.macAddress());
+  snprintf(machineNumber, 25, "DEVICE-%llX", ESP.getEfuseMac());
 
   pinMode(BUZZER, OUTPUT);
   pinMode(BTN_START, INPUT_PULLUP);
@@ -110,10 +111,242 @@ void setup()
 
   particleSensor.setup(ledBrightness, sampleAverage, ledMode, sampleRate, pulseWidth, adcRange); //Configure sensor with these settings
   //  particleSensor.setup(); //Configure sensor with default settings
-  particleSensor.setPulseAmplitudeRed(0x0A); //Turn Red LED to low to indicate sensor is running
+//  particleSensor.setPulseAmplitudeRed(0x0A); //Turn Red LED to low to indicate sensor is running
   //particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
 
-  //for WIFIMANAGER
+//  setWifiConfig();
+}
+
+void loop()
+{
+  // Read the button
+  startButtonPressed = digitalRead(BTN_START);
+  menuButtonPressed = digitalRead(BTN_MENU);
+
+  //  // DISPLAY NG MENU
+  menu();
+  //  // CHECK IF BUTTON CLICKED
+  checkButtonClicked();
+
+  if (isStart) {
+    readPulse();
+    displayPulseReading();
+  }
+  //DISPLAY NG WIFI LOGO
+  if (WiFi.status() == WL_CONNECTED) {
+    oled.drawBitmap(SCREEN_WIDTH - LOGO_SIZE, 0, wifiLogo, LOGO_SIZE, LOGO_SIZE, 1);
+  } else {
+    oled.drawBitmap(SCREEN_WIDTH - LOGO_SIZE, 0, noWifiLogo, LOGO_SIZE, LOGO_SIZE, 1);
+  }
+  oled.display();
+}
+
+void menu() {
+  if (!isStart) {
+    // REFACTOR MO YUNG PAGGDISPLAY NG SPO2, FROM PULSEREAD METHOD TO DITO SA CODE BLCOK NATO
+    if (menuButtonPreviousState == LOW) {
+      //menu is selected
+      switch (optionSelected) {
+        case 1:
+          {
+            // DISPLAY NG MACHINE NUMBER
+            String msg = menuOption[optionSelected] + "\n\t" + String(machineNumber);
+            oledPrint(0, 0, msg);
+            break;
+          }
+        case 0:
+        default:
+          {
+            // welcome
+            oledPrint(0, 0, menuOption[optionSelected]);
+            break;
+          }
+      }
+    }
+  }
+}
+
+void checkButtonClicked() {
+  // Get the current time
+  long int currentTime = millis();
+  // check if button is not press
+  if (startButtonPressed == HIGH && menuButtonPressed == HIGH) {
+    lastDebounceTime = currentTime;
+    startButtonPreviousState = HIGH;
+  }
+
+  // CHECK KUNG NA CLICK NA IYUNG BUTTON
+  if ((currentTime - lastDebounceTime) > debounceTimeout) {
+    // Button is pressed
+    if (startButtonPressed == LOW) {
+      // START/STOP Button is pressed
+      menuButtonPreviousState = HIGH;
+      if (!isStart) {
+        initialReading = true;
+        isStart = true;
+      } else {
+        isStart = false;
+        noTone(BUZZER);
+        delay(1500);
+      }
+    } else if (menuButtonPressed == LOW) {
+      noTone(BUZZER);
+      menuButtonPreviousState = LOW;
+      initialReading = true;
+      isStart = true;
+      optionSelected = (optionSelected < ARRAY_SIZE(menuOption) - 1) ? optionSelected + 1 : 0;
+      delay(500);
+    }
+  }
+}
+
+void readPulse() {
+  bufferLength = 100; //buffer length of 100 stores 4 seconds of samples running at 25sps
+  //read the first 100 samples, and determine the signal range
+  if (initialReading) {
+    for (byte i = 0 ; i < bufferLength ; i++)
+    {
+      while (particleSensor.available() == false) //do we have new data?
+        particleSensor.check(); //Check the sensor for new data
+
+      oledPrint(0, 0, "INITIAL READING...\nPlease Wait");
+
+      redBuffer[i] = particleSensor.getRed();
+      irBuffer[i] = particleSensor.getIR();
+      Serial.print(F("red="));
+      Serial.print(redBuffer[i], DEC);
+      Serial.print(F(", ir="));
+      Serial.println(irBuffer[i], DEC);
+      particleSensor.nextSample(); //We're finished with this sample so move to next sample
+    }
+    initialReading = false;
+    //calculate heart rate and SpO2 after first 100 samples (first 4 seconds of samples)
+    maxim_heart_rate_and_oxygen_saturation(redBuffer, bufferLength, irBuffer, &spo2, &validSPO2, &heartRate, &validHeartRate);
+  }
+
+  //Continuously taking samples from MAX30102.  Heart rate and SpO2 are calculated every 1 second
+  //dumping the first 25 sets of samples in the memory and shift the last 75 sets of samples to the top
+  for (byte i = 25; i < 100; i++)
+  {
+    redBuffer[i - 25] = redBuffer[i];
+    irBuffer[i - 25] = irBuffer[i];
+  }
+
+  //take 25 sets of samples before calculating the heart rate.
+  for (byte i = 75; i < 100; i++)
+  {
+    while (particleSensor.available() == false) //do we have new data?
+      particleSensor.check(); //Check the sensor for new data
+
+    redBuffer[i] = particleSensor.getRed();
+    irBuffer[i] = particleSensor.getIR();
+    particleSensor.nextSample(); //We're finished with this sample so move to next sample
+
+    Serial.print(F("HR="));
+    Serial.print(heartRate, DEC);
+
+    Serial.print(F(", HRvalid="));
+    Serial.print(validHeartRate, DEC);
+
+    Serial.print(F(", SPO2="));
+    Serial.print(spo2, DEC);
+
+    Serial.print(F(", SPO2Valid="));
+    Serial.println(validSPO2, DEC);
+  }
+
+  //After gathering 25 new samples recalculate HR and SP02
+  maxim_heart_rate_and_oxygen_saturation(redBuffer, bufferLength, irBuffer, &spo2, &validSPO2, &heartRate, &validHeartRate);
+  // Display HR and SPO2 in OLED
+
+  if (spo2 < spo2Limit) {
+    if (isBeep) {
+      noTone(BUZZER);
+      tone(BUZZER, 1900);
+    } else {
+      noTone(BUZZER);
+    }
+    isBeep = !isBeep;
+  } else {
+    noTone(BUZZER);
+  }
+
+  // Send data to server
+  if (validSPO2 == 1 && validHeartRate == 1) {
+    sendData(String(heartRate), String(spo2));
+  }
+}
+
+void sendData(String hr, String spo2) {
+  // SESEND NG DATA FROM DEVICE TO WEB SERVER
+  //PAG NAKA KONEK, MAGSESEND
+  if (WiFi.status() == WL_CONNECTED) {
+    WiFiClient client;
+    HTTPClient http;
+
+    // Your Domain name with URL path or IP address with path
+    http.begin(client, serverName + "api/pulse-data");
+
+    // Specify content-type header
+    http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+
+    // Prepare your HTTP POST request data
+    String httpRequestData = "api_key=" + apiKeyValue + "&id=" + machineNumber + "&hr=" + hr + "&spo2=" + spo2;
+    Serial.println(httpRequestData);
+
+    // Send HTTP POST request
+    int httpResponseCode = http.POST(httpRequestData);
+    Serial.println(httpResponseCode);
+    // Free resources
+    http.end();
+  }
+  else {
+    Serial.println("WiFi Disconnected");
+  }
+}
+
+void displayPulseReading() {
+  // DISPLAY HR AND SPO2 READINGS
+
+  oled.clearDisplay();
+
+  oled.setTextSize(2);
+  oled.setTextColor(WHITE);
+  oled.setCursor(5, NOTIF_BORDER);
+  oled.println("HR");
+
+  oled.setTextSize(2);
+  oled.setTextColor(WHITE);
+  oled.setCursor(5, NOTIF_BORDER + (6 * 3));
+  oled.println("SPO2");
+
+  oled.setTextSize(2);
+  oled.setTextColor(WHITE);
+  oled.setCursor(SCREEN_WIDTH / 2, NOTIF_BORDER);
+  oled.println(heartRate);
+
+  oled.setTextSize(2);
+  oled.setTextColor(WHITE);
+  oled.setCursor(SCREEN_WIDTH / 2, NOTIF_BORDER + (6 * 3));
+  oled.println(String(spo2) + "%");
+
+  oled.display();
+  delay(1);
+}
+
+void oledPrint(int x, int y, String message)
+{
+  oled.clearDisplay();
+  oled.setTextSize(1);         // set text size
+  oled.setTextColor(WHITE);    // set text color
+  oled.setCursor(x, y);
+  oled.println(message);
+  oled.display();
+  delay(1);
+}
+
+void setWifiConfig(){
+    //for WIFIMANAGER
   WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
   if (wm_nonblocking) wm.setConfigPortalBlocking(false);
 
@@ -148,205 +381,6 @@ void setup()
     Serial.println("Wifi connected...");
   }
 }
-
-void readPulse() {
-  bufferLength = 100; //buffer length of 100 stores 4 seconds of samples running at 25sps
-  //read the first 100 samples, and determine the signal range
-  if (initialReading) {
-    for (byte i = 0 ; i < bufferLength ; i++)
-    {
-      while (particleSensor.available() == false) //do we have new data?
-        particleSensor.check(); //Check the sensor for new data
-
-      oledPrint(0, 0, "INITIAL READING...\nPlease Wait");
-      redBuffer[i] = particleSensor.getRed();
-      irBuffer[i] = particleSensor.getIR();
-      Serial.print(redBuffer[i]);
-      Serial.print(", ");
-      Serial.print(irBuffer[i]);
-      particleSensor.nextSample(); //We're finished with this sample so move to next sample
-    }
-    //calculate heart rate and SpO2 after first 100 samples (first 4 seconds of samples)
-    initialReading = false;
-    maxim_heart_rate_and_oxygen_saturation(irBuffer, bufferLength, redBuffer, &spo2, &validSPO2, &heartRate, &validHeartRate);
-  }
-
-  //Continuously taking samples from MAX30102.  Heart rate and SpO2 are calculated every 1 second
-  //dumping the first 25 sets of samples in the memory and shift the last 75 sets of samples to the top
-  for (byte i = 25; i < 100; i++)
-  {
-    redBuffer[i - 25] = redBuffer[i];
-    irBuffer[i - 25] = irBuffer[i];
-  }
-
-  //take 25 sets of samples before calculating the heart rate.
-  for (byte i = 75; i < 100; i++)
-  {
-    while (particleSensor.available() == false) //do we have new data?
-      particleSensor.check(); //Check the sensor for new data
-
-    redBuffer[i] = particleSensor.getRed();
-    irBuffer[i] = particleSensor.getIR();
-    particleSensor.nextSample(); //We're finished with this sample so move to next sample
-
-    Serial.print(F(", HR="));
-    Serial.print(heartRate, DEC);
-
-    Serial.print(F(", HRvalid="));
-    Serial.print(validHeartRate, DEC);
-
-    Serial.print(F(", SPO2="));
-    Serial.print(spo2, DEC);
-
-    Serial.print(F(", SPO2Valid="));
-    Serial.println(validSPO2, DEC);
-  }
-
-  //After gathering 25 new samples recalculate HR and SP02
-  maxim_heart_rate_and_oxygen_saturation(irBuffer, bufferLength, redBuffer, &spo2, &validSPO2, &heartRate, &validHeartRate);
-  // Display HR and SPO2 in OLED
-  String message = "HR=" + String(heartRate) + "\n" + "SPO2=" + String(spo2) + "%";
-  oledPrint(0, 0, message);
-
-  if (spo2 < spo2Limit) {
-    if (isBeep) {
-      noTone(BUZZER);
-      tone(BUZZER, 1900);
-    } else {
-      noTone(BUZZER);
-    }
-    isBeep = !isBeep;
-  } else {
-    noTone(BUZZER);
-  }
-
-  // Send data to server
-  if (validSPO2 == 1 && validHeartRate == 1) {
-    //sendData(String(heartRate), String(spo2));
-  }
-}
-
-void sendData(String hr, String spo2) {
-  // SESEND NG DATA FROM DEVICE TO WEB SERVER
-  //PAG NAKA KONEK, MAGSESEND
-  if (WiFi.status() == WL_CONNECTED) {
-    WiFiClient client;
-    HTTPClient http;
-
-    // Your Domain name with URL path or IP address with path
-    http.begin(client, serverName + "api/pulse-data");
-
-    // Specify content-type header
-    http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-
-    // Prepare your HTTP POST request data
-    String httpRequestData = "api_key=" + apiKeyValue + "&id=" + machineNumber + "&hr=" + hr + "&spo2=" + spo2 + "&spo2_limit=" + spo2Limit;
-
-    // Send HTTP POST request
-    int httpResponseCode = http.POST(httpRequestData);
-    Serial.println(httpResponseCode);
-    // Free resources
-    http.end();
-  }
-  else {
-    Serial.println("WiFi Disconnected");
-  }
-  //Send an HTTP POST request every 30 seconds
-}
-
-void loop()
-{
-  // Read the button
-  startButtonPressed = digitalRead(BTN_START);
-  menuButtonPressed = digitalRead(BTN_MENU);
-
-  // DISPLAY NG MENU
-  if (!isStart) {
-    if (menuButtonPreviousState == LOW) {
-      //menu is selected
-      switch (optionSelected) {
-        case 1:
-          {
-            // DISPLAY NG MACHINE NUMBER
-            String msg = menuOption[optionSelected] + "\n\t" + String(machineNumber);
-            oledPrint(0, 0, msg);
-            break;
-          }
-        case 0:
-        default:
-          {
-            // welcome
-            oledPrint(0, 0, menuOption[optionSelected]);
-            break;
-          }
-      }
-    }
-  }
-
-  // Get the current time
-  long int currentTime = millis();
-  // check if button is not press
-  if (startButtonPressed == HIGH && menuButtonPressed == HIGH) {
-    lastDebounceTime = currentTime;
-    startButtonPreviousState = HIGH;
-  }
-
-  // CHECK KUNG NA CLICK NA IYUNG BUTTON
-  if ((currentTime - lastDebounceTime) > debounceTimeout) {
-    // Button is pressed
-    if (startButtonPressed == LOW) {
-      // START/STOP Button is pressed
-      menuButtonPreviousState = HIGH;
-      if (!isStart) {
-        initialReading = true;
-        isStart = true;
-      } else {
-        isStart = false;
-        noTone(BUZZER);
-        delay(1000);
-      }
-    } else if (menuButtonPressed == LOW) {
-      noTone(BUZZER);
-      menuButtonPreviousState = HIGH;
-      optionSelected = (optionSelected < ARRAY_SIZE(menuOption) - 1) ? optionSelected + 1 : 0;
-      delay(500);
-    }
-  }
-
-  if (isStart) {
-    readPulse();
-  }
-  //DISPLAY NG WIFI LOGO
-  if (WiFi.status() == WL_CONNECTED) {
-    oled.drawBitmap(100, 0, wifiLogo, 16, 16, WHITE);
-  } else {
-    oled.drawBitmap(100, 0, noWifiLogo, 16, 16, WHITE);
-  }
-  oled.display();
-}
-
-void oledPrint(int x, int y, String message)
-{
-  oled.clearDisplay();
-  oled.setTextSize(1);         // set text size
-  oled.setTextColor(WHITE);    // set text color
-  oled.setCursor(x, y);
-  oled.println(message);
-  oled.display();
-  delay(1);
-}
-
-void oledPrint(int x, int y, char* message)
-{
-  oled.clearDisplay();
-  oled.setTextSize(1);         // set text size
-  oled.setTextColor(WHITE);    // set text color
-  oled.setCursor(x, y);
-  oled.println(message);
-  oled.display();
-  delay(1);
-}
-
 String getParam(String name) {
   //read parameter from server, for customhmtl input
   String value;
