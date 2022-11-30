@@ -82,7 +82,7 @@ void setup()
   // initialize OLED display with I2C address 0x3C
   if (!oled.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("failed to start SSD1306 OLED"));
-//    while (1);
+    //    while (1);
   }
 
   oled.display();
@@ -102,19 +102,19 @@ void setup()
     delay(1500);
   }
 
-  byte ledBrightness = 60; //Options: 0=Off to 255=50mA
-  byte sampleAverage = 4; //Options: 1, 2, 4, 8, 16, 32
-  byte ledMode = 2; //Options: 1 = Red only, 2 = Red + IR, 3 = Red + IR + Green
-  byte sampleRate = 100; //Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
-  int pulseWidth = 411; //Options: 69, 118, 215, 411
-  int adcRange = 4096; //Options: 2048, 4096, 8192, 16384
+  //  byte ledBrightness = 80; //Options: 0=Off to 255=50mA
+  //  byte sampleAverage = 4; //Options: 1, 2, 4, 8, 16, 32
+  //  byte ledMode = 2; //Options: 1 = Red only, 2 = Red + IR, 3 = Red + IR + Green
+  //  byte sampleRate = 100; //Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
+  //  int pulseWidth = 411; //Options: 69, 118, 215, 411
+  //  int adcRange = 4096; //Options: 2048, 4096, 8192, 16384
+  //
+  //  particleSensor.setup(ledBrightness, sampleAverage, ledMode, sampleRate, pulseWidth, adcRange); //Configure sensor with these settings
+  particleSensor.setup(); //Configure sensor with default settings
+  particleSensor.setPulseAmplitudeRed(0x0A); //Turn Red LED to low to indicate sensor is running
+  particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
 
-  particleSensor.setup(ledBrightness, sampleAverage, ledMode, sampleRate, pulseWidth, adcRange); //Configure sensor with these settings
-  //  particleSensor.setup(); //Configure sensor with default settings
-//  particleSensor.setPulseAmplitudeRed(0x0A); //Turn Red LED to low to indicate sensor is running
-  //particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
-
-//  setWifiConfig();
+  //  setWifiConfig();
 }
 
 void loop()
@@ -345,8 +345,8 @@ void oledPrint(int x, int y, String message)
   delay(1);
 }
 
-void setWifiConfig(){
-    //for WIFIMANAGER
+void setWifiConfig() {
+  //for WIFIMANAGER
   WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
   if (wm_nonblocking) wm.setConfigPortalBlocking(false);
 
