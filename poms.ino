@@ -43,7 +43,7 @@ byte spo2Limit = 90; // sets limit for spo2 level to beep
 Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 #define BUZZER 16
-#define BTN_START 32
+#define BTN_START P32
 #define BTN_MENU 33
 #define debounceTimeout 50
 
@@ -72,7 +72,7 @@ void setup()
 {
   Serial.begin(115200); // initialize serial communication at 115200 bits per second:
   // Set Machine Number
-  snprintf(machineNumber, 25, "DEVICE-%llX", WiFi.macAddress());
+  snprintf(machineNumber, 25, "DEVICE-%llX", ESP.macAddress());
 
   pinMode(BUZZER, OUTPUT);
   pinMode(BTN_START, INPUT_PULLUP);
